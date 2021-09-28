@@ -1,0 +1,107 @@
+#!/bin/sh
+
+# svn utilities
+svn_dump_all_unversioned() {
+	svn status | grep "^\?" | awk "{print \$2}";
+}
+#prints a plain list of every file and directory in the current dir and subdir not currently versioned by SVN
+alias svn-dump-unversioned=svn_dump_all_unversioned
+
+svn_overwrite_global_ignores() {
+	svn propset svn:global-ignores -F "$1" .;
+}
+#replaces everything in the current ignores file with whatever is in the file specified
+alias svn-replace-globalignores=svn_overwrite_global_ignores
+
+svn_add_all_unversioned() {
+	svn-dump-unversioned | while read line ; do svn add "$line" ; done
+}
+#adds all unversioned files to the next commit
+alias svn-add-all=svn_add_all_unversioned
+
+svn_dump_ignore_list() {
+	ISGLOBAL="false"
+	ISFIRST="true"
+
+	while read p; do
+		if [[ "$p" == *"svn:"* ]]; then
+			if [[ "$p" == *"global-ignores"* ]]; then
+				ISGLOBAL="true"
+			else
+				ISGLOBAL="false"
+			fi
+		fi
+
+		if [[ "$ISGLOBAL" == "true" ]]; then
+			if [[ "$ISFIRST" == "false" ]]; then
+				echo "$p"
+			else
+				ISFIRST="false"
+			fi
+		fi
+	done
+}
+
+alias svn-list-ignores="svn proplist -v | svn_dump_ignore_list"
+
+svn_append_global_ignores() {
+	svn-list-ignores | while read line ; do
+		if [[ "$line" != '' ]] ; then
+			echo "$line" >> temp.ignores
+		fi
+	done
+	echo "$1" >> temp.ignores
+	svn-replace-globalignores temp.ignores
+	rm temp.ignores
+}
+#adds the specified string to the list of global ignores
+alias svn-ignore=svn_append_global_ignores
+
+svn_filter_global_ignores() {
+	echo "" > temp.ignores
+	svn-list-ignores | while read line ; do
+		if [[ "$line" == "$1" ]] ; then
+			echo "Noticed $1"
+		else
+			echo "$line" >> temp.ignores
+		fi
+	done
+	
+	svn-replace-globalignores temp.ignores
+	rm temp.ignores
+}
+#removes the specified string from the list of global ignores
+alias svn-notice=svn_filter_global_ignores
+
+
+# code review tools
+
+svn_dump_changes_since_date() {
+	svn diff --summarize -r {$(date --date="$1" +%F)}:{$(date +%F)}
+}
+
+alias svn-last-week-changes='svn_dump_changes_since_date "1 week ago"'
+svn_filter_for_code_review() {
+	grep -v "^D" | cut -c6- | awk '{ sub(/^[ \t]+/, ""); print }' | grep '\.cs\>' | grep -v '\.meta\>'
+}
+
+alias svn-list-review-candidates="svn-last-week-changes | svn_filter_for_code_review"
+
+svn_filter_for_code_review() {
+    grep -v "^D" | cut -c6- | awk '{ sub(/^[ \t]+/, ""); print }' | grep '\.cs\>' | grep -v '\.meta\>'
+}
+
+alias svn-list-review-candidates="svn-last-week-changes | svn_filter_for_code_review"
+
+svn_generate_code_review() {
+    echo "You will be prompted for your password twice. This is an SVN limitation. Sorry."
+    read -s -p "SVN Password:" PASSWORD
+    TODAY=$(date +%F)
+    mkdir -p "code-review/$TODAY"
+    svn-list-review-candidates | while read line; do
+        svn --non-interactive --password $PASSWORD diff -x -U0 -r {$(date --date="1 week ago" +%F)}:{$TODAY} "$line" > "code-review/$TODAY/$(basename $line)"
+    done
+}
+
+alias svn-generate-code-review="svn_generate_code_review"
+

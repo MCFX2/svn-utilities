@@ -1,0 +1,14 @@
+#!/bin/bash
+if [[ "$MCFX2_SVN_UTILS_INSTALLED" != "yes" ]] ; then
+	# set up bashrc to point to us
+	echo 'MCFX2_SVN_UTILS_INSTALLED="yes"' >> ~/.bashrc
+	echo 'source ~/.mcfx2svn' >> ~/.bashrc
+fi
+
+# delete old version and replace with new
+cat svn-utils > ~/.mcfx2svn
+
+# reload bashrc
+source ~/.bashrc
+
+echo "Install complete."
